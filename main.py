@@ -1,13 +1,19 @@
 import os
 from pathlib import Path
+import datetime
 from prompt_toolkit.shortcuts import message_dialog, radiolist_dialog, button_dialog, input_dialog
 import magic
-# from prompt_toolkit import prompt
+import json
+from prompt_toolkit import prompt
 # from prompt_toolkit import print_formatted_text
 # from prompt_toolkit import PromptSession
 # from prompt_toolkit.completion import NestedCompleter, WordCompleter
 # from prompt_toolkit.formatted_text import HTML
 # from prompt_toolkit.styles import Style
+
+report_data_loc = "./reports/data"
+report_text_loc = "./reports/text"
+report_index_loc = "./reports/index.json"
 
 
 def welcome_screen():
@@ -73,7 +79,31 @@ def add_watch():
 
 def list_reports():
     # list all reports and report types
-    pass
+    with open(report_index_loc, 'r') as report_index:
+        index_dict = json.load(report_index)
+    index_list = index_dict["reports"]
+    display_list = []
+    for report in index_list:
+        report_date = report["date"]
+        report_type = report["report_type"]
+        report_dir = report["directory"]
+        value_path = report["report_path"]
+        display_text = report_type + ' | ' + report_date + ' | ' + report_dir
+        display_list.append((value_path, display_text))
+
+    report_choice = radiolist_dialog(
+        title="All reports",
+        text="Choose from the following reports",
+        values=display_list,
+        ok_text="Select",
+        cancel_text="Quit",
+    ).run()
+
+    with open(report_choice, 'r') as report:
+        report_dict = json.load(report)
+    report_json_pretty = json.dumps(report_dict, indent=4)
+    print(report_json_pretty)
+    prompt("Ready to return to the menu? ")
 
 
 def get_file_list(directory, file_list):
@@ -109,7 +139,22 @@ def run_contents_report(directory_path):
         else:
             mimetypes_count[mime] = 1
 
-    print(mimetypes_count)
+    current_date = datetime.datetime.now()
+    current_date_flattened = current_date.strftime('%Y-%m-%d_%H_%M_%S')
+    contents_report_name = directory_path.replace('/', '_') + '_' + current_date_flattened + '.json'
+    contents_report_path = "reports/data/" + contents_report_name
+    print(contents_report_name)
+    report_dict = {"directory": directory_path, "date": current_date.isoformat(), "mimetypes": mimetypes_count}
+    with open(contents_report_path, 'w') as contents_file:
+        json.dump(report_dict, contents_file)
+
+    new_report = {"directory": directory_path, "date": current_date.isoformat(), "report_path": contents_report_path,
+                  "report_type": "contents"}
+    with open(report_index_loc, 'r') as report_index:
+        index_dict = json.load(report_index)
+    index_dict["reports"].append(new_report)
+    with open(report_index_loc, 'w') as report_index:
+        json.dump(index_dict, report_index)
 
 
 def new_contents_report_menu():
@@ -169,8 +214,8 @@ def main():
         main_menu_choice = main_menu()
         if main_menu_choice == "new_contents":
             new_contents_report_menu()
-
-    # run_contents_report("/Users/andrewberger/storage/r/exclude/")
+        elif main_menu_choice == "list_reports":
+            list_reports()
 
 
 if __name__ == "__main__":
