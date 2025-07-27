@@ -16,6 +16,47 @@ report_text_loc = "./reports/text"
 report_index_loc = "./reports/index.json"
 
 
+def error_dialog(err_type, input_path):
+    if err_type == "no_dir":
+        error_text = "Error: directory not found: " + input_path
+    elif err_type == "not_dir":
+        error_text = "Error: input is not a directory: " + input_path
+    else:
+        error_text = "Unknown error"
+
+    message_dialog(
+        title="Error",
+        text=error_text,
+    ).run()
+
+
+def validate_directory(directory_path):
+    # validate directory exists
+    if not os.path.exists(directory_path):
+        print("error: directory not found:", directory_path)
+        error_dialog("no_dir", directory_path)
+        return False
+    elif not os.path.isdir(directory_path):
+        error_dialog("not_dir", directory_path)
+        return False
+    else:
+        return True
+
+
+def file_count_confirmation(file_count):
+    choice = button_dialog(
+        title="Ready to run the report?",
+        text="The selected directory contains " + str(file_count) + " files",
+        buttons=[
+            ('Yes', True),
+            ('Change directory', "change"),
+            ('Return to main menu', False)
+        ]
+    ).run()
+
+    return choice
+
+
 def welcome_screen():
     welcome_text = "Some welcome text." \
         "\n\nWould you like to enter?"
@@ -30,6 +71,22 @@ def welcome_screen():
     ).run()
 
     return welcome_choice
+
+
+def help_screen():
+    help_text = "Some help text." \
+        "\n\nWould you like to continue?"
+
+    help_choice = button_dialog(
+        title="Welcome!",
+        text=help_text,
+        buttons=[
+            ("Yes", "Enter"),
+            ("Quit", "Quit"),
+        ]
+    ).run()
+
+    return help_choice
 
 
 def main_menu():
@@ -58,9 +115,26 @@ def manage_watch():
     pass
 
 
-def add_watch():
+def add_watch_menu():
     # get directory path
-    # validate directory exists and confirm
+    valid_directory = False
+    directory_path = None
+    get_directory_text = ("Please enter the absolute path to a directory.\n\n"
+                          "Note: to run a report, you must have full "
+                          "read permissions to all files in the directory.")
+    while not valid_directory:
+        directory_path = input_dialog(
+            title="Choose a directory",
+            text=get_directory_text,
+            ok_text="Continue",
+        ).run()
+
+        # return to main menu if user cancels
+        if directory_path is None:
+            return
+
+        valid_directory = validate_directory(directory_path)
+    print("will add", directory_path)
     # get ignore list
     # validate ignore list
     # run first report
@@ -103,7 +177,7 @@ def list_reports():
         report_dict = json.load(report)
     report_json_pretty = json.dumps(report_dict, indent=4)
     print(report_json_pretty)
-    prompt("Ready to return to the menu? ")
+    prompt("Press enter to return to the main menu. ")
 
 
 def get_file_list(directory, file_list):
@@ -120,6 +194,11 @@ def get_file_list(directory, file_list):
 def run_contents_report(directory_path):
     file_list = []
     get_file_list(directory_path, file_list)
+
+    file_count = len(file_list)
+    proceed = file_count_confirmation(file_count)
+    if proceed is False:
+        return  # back to main menu
 
     file_array = []
     for file in file_list:
@@ -143,7 +222,6 @@ def run_contents_report(directory_path):
     current_date_flattened = current_date.strftime('%Y-%m-%d_%H_%M_%S')
     contents_report_name = directory_path.replace('/', '_') + '_' + current_date_flattened + '.json'
     contents_report_path = "reports/data/" + contents_report_name
-    print(contents_report_name)
     report_dict = {"directory": directory_path, "date": current_date.isoformat(), "mimetypes": mimetypes_count}
     with open(contents_report_path, 'w') as contents_file:
         json.dump(report_dict, contents_file)
@@ -158,53 +236,87 @@ def run_contents_report(directory_path):
 
 
 def new_contents_report_menu():
-
-    def error_dialog(err_type, input_path):
-        if err_type == "no_dir":
-            error_text = "Error: directory not found: " + input_path
-        elif err_type == "not_dir":
-            error_text = "Error: input is not a directory: " + input_path
-        else:
-            error_text = "Unknown error"
-
-        message_dialog(
-            title="Error",
-            text=error_text,
-        ).run()
-
     # get directory path
     valid_directory = False
     directory_path = None
-    while not valid_directory:
-        get_directory_text = ("Please enter the absolute path to a directory.\n\n"
-                              "Note: to get an accurate count, you must have full "
-                              "read permissions to all files in the directory.")
+    get_directory_text = ("Please enter the absolute path to a directory.\n\n"
+                          "Note: to run a report, you must have full "
+                          "read permissions to all files in the directory.")
 
+    while not valid_directory:
         directory_path = input_dialog(
             title="Choose a directory",
             text=get_directory_text,
             ok_text="Continue",
         ).run()
 
-        # validate directory exists
-        if not os.path.exists(directory_path):
-            print("error: directory not found:", directory_path)
-            error_dialog("no_dir", directory_path)
-            # error dialog
-        elif not os.path.isdir(directory_path):
-            error_dialog("not_dir", directory_path)
-        else:
-            valid_directory = True
+        # return to main menu if user cancels
+        if directory_path is None:
+            return
+
+        valid_directory = validate_directory(directory_path)
 
     run_contents_report(directory_path)
     # confirmation
 
 
-def main_menu_control():
-    pass
+def run_change_report(directory_path):
+    # logic:
+    #   if new, all files listed as new
+    #   if previous change report, diff new with previous
+    file_list = []
+    get_file_list(directory_path, file_list)
+
+    file_array = []
+    for file in file_list:
+        stat_dict = {}
+        file_stats = Path(file).stat()
+        stat_dict["file_path"] = file
+        stat_dict["size"] = file_stats.st_size
+        stat_dict["inode"] = file_stats.st_ino
+        stat_dict["mime_type"] = magic.from_file(file, mime=True)
+        file_array.append(stat_dict)
+
+    current_date = datetime.datetime.now()
+    current_date_flattened = current_date.strftime('%Y-%m-%d_%H_%M_%S')
+    file_report_name = directory_path.replace('/', '_') + '_' + current_date_flattened + '.json'
+    file_report_path = "reports/data/" + file_report_name
+    report_dict = {"directory": directory_path, "date": current_date.isoformat(), "files": file_array}
+    with open(file_report_path, 'w') as file_listing:
+        json.dump(report_dict, file_listing)
+
+    new_report = {"directory": directory_path, "date": current_date.isoformat(), "report_path": file_report_path,
+                  "report_type": "file_listing"}
+    with open(report_index_loc, 'r') as report_index:
+        index_dict = json.load(report_index)
+    index_dict["reports"].append(new_report)
+    with open(report_index_loc, 'w') as report_index:
+        json.dump(index_dict, report_index)
+
+    # get existing reports
+    with open(report_index_loc, 'r') as report_index:
+        index_dict = json.load(report_index)
+    index_list = index_dict["reports"]
+    previous_listings = []
+    for report in index_list:
+        if report["directory"] == directory_path and report["report_type"] == "file_listing":
+            previous_listings.append(report)
+
+    all_new = False
+    if len(previous_listings) > 1:
+        print(previous_listings[-2:])
+    else:
+        all_new = True
+        print(previous_listings)
+
+    if all_new:
+        print("all files are new in", directory_path)
 
 
 def main():
+    # run_change_report("/Users/andrewberger/storage/tmp")
+    # return
+
     launch = welcome_screen()
     if launch == 'Quit':
         return
@@ -216,6 +328,8 @@ def main():
             new_contents_report_menu()
         elif main_menu_choice == "list_reports":
             list_reports()
+        elif main_menu_choice == "help":
+            help_screen()
 
 
 if __name__ == "__main__":
