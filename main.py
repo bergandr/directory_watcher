@@ -115,42 +115,6 @@ def manage_watch():
     pass
 
 
-def add_watch_menu():
-    # get directory path
-    valid_directory = False
-    directory_path = None
-    get_directory_text = ("Please enter the absolute path to a directory.\n\n"
-                          "Note: to run a report, you must have full "
-                          "read permissions to all files in the directory.")
-    while not valid_directory:
-        directory_path = input_dialog(
-            title="Choose a directory",
-            text=get_directory_text,
-            ok_text="Continue",
-        ).run()
-
-        # return to main menu if user cancels
-        if directory_path is None:
-            return
-
-        valid_directory = validate_directory(directory_path)
-    print("will add", directory_path)
-    # get ignore list
-    # validate ignore list
-    # run first report
-    # get ignore list
-    # ignore_list_text = ("Please enter a list of filename patterns to ignore.\n\n"
-    #                     "Note: to get an accurate count, you must have full "
-    #                     "read permissions to all files in the directory.")
-    #
-    # ignore_list = input_dialog(
-    #     title="Ignore list",
-    #     text=ignore_list_text,
-    #     ok_text="Continue",
-    # ).run()
-    pass
-
-
 def list_reports():
     # list all reports and report types
     with open(report_index_loc, 'r') as report_index:
@@ -169,13 +133,19 @@ def list_reports():
         title="All reports",
         text="Choose from the following reports",
         values=display_list,
-        ok_text="Select",
-        cancel_text="Quit",
+        ok_text="Open",
+        cancel_text="Main menu",
     ).run()
 
+    # if the user doesn't select a report
+    if report_choice is None:
+        return
+
+    # print the selected report to the screen
     with open(report_choice, 'r') as report:
         report_dict = json.load(report)
     report_json_pretty = json.dumps(report_dict, indent=4)
+    os.system('clear')
     print(report_json_pretty)
     prompt("Press enter to return to the main menu. ")
 
@@ -221,7 +191,7 @@ def run_contents_report(directory_path):
     current_date = datetime.datetime.now()
     current_date_flattened = current_date.strftime('%Y-%m-%d_%H_%M_%S')
     contents_report_name = directory_path.replace('/', '_') + '_' + current_date_flattened + '.json'
-    contents_report_path = "reports/data/" + contents_report_name
+    contents_report_path = "reports/data/contents" + contents_report_name
     report_dict = {"directory": directory_path, "date": current_date.isoformat(), "mimetypes": mimetypes_count}
     with open(contents_report_path, 'w') as contents_file:
         json.dump(report_dict, contents_file)
@@ -260,6 +230,100 @@ def new_contents_report_menu():
     # confirmation
 
 
+def diff_file_listing(latest, penultimate, directory_path):
+    latest_set = set()
+    penultimate_set = set()
+
+    with open(latest, 'r') as latest_report:
+        latest_dict = json.load(latest_report)
+        for file in latest_dict["files"]:
+            latest_set.add(json.dumps(file))
+
+    with open(penultimate, 'r') as penultimate_report:
+        penultimate_dict = json.load(penultimate_report)
+        for file in penultimate_dict["files"]:
+            penultimate_set.add(json.dumps(file))
+
+    unchanged = latest_set.intersection(penultimate_set)
+    unchanged_files = []
+    for item in unchanged:
+        file_dict = json.loads(item)
+        print(file_dict)
+        unchanged_files.append(file_dict["file_path"])
+
+    latest_unique = latest_set.difference(penultimate_set)
+    penultimate_unique = penultimate_set.difference(latest_set)
+
+    latest_by_inode = {}
+    for item in latest_unique:
+        file_dict = json.loads(item)
+        inode_string = str(file_dict["inode"])
+        latest_by_inode[inode_string] = file_dict
+
+    penultimate_by_inode = {}
+    for item in penultimate_unique:
+        file_dict = json.loads(item)
+        inode_string = str(file_dict["inode"])
+        penultimate_by_inode[inode_string] = file_dict
+
+    inodes_in_both = set()
+    deleted_files = []
+    for penultimate_key in penultimate_by_inode:
+        if penultimate_key in latest_by_inode:
+            inodes_in_both.add(penultimate_key)
+        else:
+            deleted_files.append(penultimate_by_inode[penultimate_key]["file_path"])
+
+    new_files = []
+    for latest_key in latest_by_inode:
+        if latest_key in penultimate_by_inode:
+            inodes_in_both.add(latest_key)
+        else:
+            new_files.append(latest_by_inode[latest_key]["file_path"])
+
+    # check on files where inode is same, something else is not
+    modified_files = []
+    renamed_files = []
+    for inode in inodes_in_both:
+        latest_file = latest_by_inode[inode]
+        penultimate_file = penultimate_by_inode[inode]
+        if latest_file["size"] != penultimate_file["size"]:
+            modified_files.append(latest_file["file_path"])
+
+        if latest_file["file_path"] != penultimate_file["file_path"]:
+            renamed_file = {"old": penultimate_file["file_path"], "new": latest_file["file_path"]}
+            renamed_files.append(renamed_file)
+
+    print("New:", new_files)
+    print("Deleted:", deleted_files)
+    print("Renamed:", renamed_files)
+    print("Modified:", modified_files)
+    print("Unchanged:", unchanged_files)
+
+    # write change report to file
+    current_date = datetime.datetime.now()
+    current_date_flattened = current_date.strftime('%Y-%m-%d_%H_%M_%S')
+    change_report_name = directory_path.replace('/', '_') + '_' + current_date_flattened + '.json'
+    change_report_path = "reports/data/change" + change_report_name
+    report_dict = {"directory": directory_path, "date": current_date.isoformat(),
+                   "changes": {
+                       "new": new_files, "deleted": deleted_files, "renamed": renamed_files,
+                       "modified": modified_files, "unchanged": unchanged_files}
+                   }
+
+    with open(change_report_path, 'w') as contents_file:
+        json.dump(report_dict, contents_file)
+
+    # update the report index
+    new_report = {"directory": directory_path, "date": current_date.isoformat(), "report_path": change_report_path,
+                  "report_type": "change"}
+    with open(report_index_loc, 'r') as report_index:
+        index_dict = json.load(report_index)
+    index_dict["reports"].append(new_report)
+    with open(report_index_loc, 'w') as report_index:
+        json.dump(index_dict, report_index)
+
+
 def run_change_report(directory_path):
     # logic:
     #   if new, all files listed as new
@@ -280,7 +344,7 @@ def run_change_report(directory_path):
     current_date = datetime.datetime.now()
     current_date_flattened = current_date.strftime('%Y-%m-%d_%H_%M_%S')
     file_report_name = directory_path.replace('/', '_') + '_' + current_date_flattened + '.json'
-    file_report_path = "reports/data/" + file_report_name
+    file_report_path = "reports/data/files" + file_report_name
     report_dict = {"directory": directory_path, "date": current_date.isoformat(), "files": file_array}
     with open(file_report_path, 'w') as file_listing:
         json.dump(report_dict, file_listing)
@@ -302,19 +366,57 @@ def run_change_report(directory_path):
         if report["directory"] == directory_path and report["report_type"] == "file_listing":
             previous_listings.append(report)
 
-    all_new = False
-    if len(previous_listings) > 1:
-        print(previous_listings[-2:])
+    if len(previous_listings) < 2:
+        diff_file_listing(previous_listings[-1]["report_path"],
+                          None,
+                          directory_path)
     else:
-        all_new = True
-        print(previous_listings)
+        diff_file_listing(previous_listings[-1]["report_path"],
+                          previous_listings[-2]["report_path"],
+                          directory_path)
 
-    if all_new:
-        print("all files are new in", directory_path)
+
+def add_watch_menu():
+    # get directory path
+    valid_directory = False
+    directory_path = None
+    get_directory_text = ("Please enter the absolute path to a directory.\n\n"
+                          "Note: to run a report, you must have full "
+                          "read permissions to all files in the directory.")
+    while not valid_directory:
+        directory_path = input_dialog(
+            title="Choose a directory",
+            text=get_directory_text,
+            ok_text="Continue",
+        ).run()
+
+        # return to main menu if user cancels
+        if directory_path is None:
+            return
+
+        valid_directory = validate_directory(directory_path)
+    # get ignore list
+    # validate ignore list
+    # run first report
+    # get ignore list
+    # ignore_list_text = ("Please enter a list of filename patterns to ignore.\n\n"
+    #                     "Note: to get an accurate count, you must have full "
+    #                     "read permissions to all files in the directory.")
+    #
+    # ignore_list = input_dialog(
+    #     title="Ignore list",
+    #     text=ignore_list_text,
+    #     ok_text="Continue",
+    # ).run()
+    run_change_report(directory_path)
 
 
 def main():
-    # run_change_report("/Users/andrewberger/storage/tmp")
+    # run_change_report("/Users/andrewberger/experiments")
+    # diff_file_listing("reports/data/_Users_andrewberger_experiments_2025-07-27_17_37_33.json",
+    #                   "reports/data/_Users_andrewberger_experiments_2025-07-27_15_44_30.json",
+    #                   "/Users/andrewberger/experiments")
+    # print("only diffed")
     # return
 
     launch = welcome_screen()
@@ -330,6 +432,10 @@ def main():
             list_reports()
         elif main_menu_choice == "help":
             help_screen()
+        elif main_menu_choice == "add_watch":
+            add_watch_menu()
+        elif main_menu_choice == "manage_watch":
+            manage_watch()
 
 
 if __name__ == "__main__":
