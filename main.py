@@ -5,15 +5,16 @@ from prompt_toolkit.shortcuts import message_dialog, radiolist_dialog, button_di
 import magic
 import json
 from prompt_toolkit import prompt
-# from prompt_toolkit import print_formatted_text
+from prompt_toolkit import print_formatted_text
 # from prompt_toolkit import PromptSession
 # from prompt_toolkit.completion import NestedCompleter, WordCompleter
 # from prompt_toolkit.formatted_text import HTML
 # from prompt_toolkit.styles import Style
 
-report_data_loc = "./reports/data"
-report_text_loc = "./reports/text"
-report_index_loc = "./reports/index.json"
+report_data_loc = "./reports/data/"  # file listings (data backing the reports)
+report_text_loc = "./reports/text/"  # reports in JSON
+report_index_loc = "./reports/index.json"  # index of all reports
+watch_index_loc = "./reports/watch_index.json"  # index of directories being watched
 
 
 def error_dialog(err_type, input_path):
@@ -28,6 +29,22 @@ def error_dialog(err_type, input_path):
         title="Error",
         text=error_text,
     ).run()
+
+
+def create_report_storage_if_none():
+    # create index of reports if none exists - meant to run at first time use
+    if os.path.exists(report_index_loc) and os.path.exists(report_data_loc) and os.path.exists(report_text_loc):
+        return
+    else:
+        # create reports index
+        blank_index_dict = {"reports": []}
+        with open(report_index_loc, 'w') as report_index:
+            json.dump(blank_index_dict, report_index)
+
+        # create reports data directory
+        os.mkdir(report_data_loc)
+        # create reports text directory
+        os.mkdir(report_text_loc)
 
 
 def validate_directory(directory_path):
@@ -122,16 +139,18 @@ def list_reports():
     index_list = index_dict["reports"]
     display_list = []
     for report in index_list:
-        report_date = report["date"]
-        report_type = report["report_type"]
-        report_dir = report["directory"]
-        value_path = report["report_path"]
-        display_text = report_type + ' | ' + report_date + ' | ' + report_dir
-        display_list.append((value_path, display_text))
+        # only list contents or change reports, not raw file list data
+        if report["report_type"] != "file_listing":
+            report_date = report["date"]
+            report_type = report["report_type"]
+            report_dir = report["directory"]
+            value_path = report["report_path"]
+            display_text = report_type + ' | ' + report_date + ' | ' + report_dir
+            display_list.append((value_path, display_text))
 
     report_choice = radiolist_dialog(
         title="All reports",
-        text="Choose from the following reports",
+        text="Choose a report from the list, then select 'Open' to view it.",
         values=display_list,
         ok_text="Open",
         cancel_text="Main menu",
@@ -146,7 +165,7 @@ def list_reports():
         report_dict = json.load(report)
     report_json_pretty = json.dumps(report_dict, indent=4)
     os.system('clear')
-    print(report_json_pretty)
+    print_formatted_text(report_json_pretty)
     prompt("Press enter to return to the main menu. ")
 
 
@@ -191,7 +210,7 @@ def run_contents_report(directory_path):
     current_date = datetime.datetime.now()
     current_date_flattened = current_date.strftime('%Y-%m-%d_%H_%M_%S')
     contents_report_name = directory_path.replace('/', '_') + '_' + current_date_flattened + '.json'
-    contents_report_path = "reports/data/contents" + contents_report_name
+    contents_report_path = "reports/text/contents" + contents_report_name
     report_dict = {"directory": directory_path, "date": current_date.isoformat(), "mimetypes": mimetypes_count}
     with open(contents_report_path, 'w') as contents_file:
         json.dump(report_dict, contents_file)
@@ -234,77 +253,78 @@ def diff_file_listing(latest, penultimate, directory_path):
     latest_set = set()
     penultimate_set = set()
 
+    new_files = []
+    unchanged_files = []
+    deleted_files = []
+    modified_files = []
+    renamed_files = []
+
     with open(latest, 'r') as latest_report:
         latest_dict = json.load(latest_report)
         for file in latest_dict["files"]:
             latest_set.add(json.dumps(file))
 
-    with open(penultimate, 'r') as penultimate_report:
-        penultimate_dict = json.load(penultimate_report)
-        for file in penultimate_dict["files"]:
-            penultimate_set.add(json.dumps(file))
+    if penultimate is None:
+        # if this is the first time a change report has run, all files are new
+        for item in latest_set:
+            file_dict = json.loads(item)
+            new_files.append(file_dict["file_path"])
+    else:
+        with open(penultimate, 'r') as penultimate_report:
+            penultimate_dict = json.load(penultimate_report)
+            print(penultimate_dict)
+            for file in penultimate_dict["files"]:
+                penultimate_set.add(json.dumps(file))
 
-    unchanged = latest_set.intersection(penultimate_set)
-    unchanged_files = []
-    for item in unchanged:
-        file_dict = json.loads(item)
-        print(file_dict)
-        unchanged_files.append(file_dict["file_path"])
+        unchanged = latest_set.intersection(penultimate_set)
+        for item in unchanged:
+            file_dict = json.loads(item)
+            unchanged_files.append(file_dict["file_path"])
 
-    latest_unique = latest_set.difference(penultimate_set)
-    penultimate_unique = penultimate_set.difference(latest_set)
+        latest_unique = latest_set.difference(penultimate_set)
+        penultimate_unique = penultimate_set.difference(latest_set)
 
-    latest_by_inode = {}
-    for item in latest_unique:
-        file_dict = json.loads(item)
-        inode_string = str(file_dict["inode"])
-        latest_by_inode[inode_string] = file_dict
+        latest_by_inode = {}
+        for item in latest_unique:
+            file_dict = json.loads(item)
+            inode_string = str(file_dict["inode"])
+            latest_by_inode[inode_string] = file_dict
 
-    penultimate_by_inode = {}
-    for item in penultimate_unique:
-        file_dict = json.loads(item)
-        inode_string = str(file_dict["inode"])
-        penultimate_by_inode[inode_string] = file_dict
+        penultimate_by_inode = {}
+        for item in penultimate_unique:
+            file_dict = json.loads(item)
+            inode_string = str(file_dict["inode"])
+            penultimate_by_inode[inode_string] = file_dict
 
-    inodes_in_both = set()
-    deleted_files = []
-    for penultimate_key in penultimate_by_inode:
-        if penultimate_key in latest_by_inode:
-            inodes_in_both.add(penultimate_key)
-        else:
-            deleted_files.append(penultimate_by_inode[penultimate_key]["file_path"])
+        inodes_in_both = set()
+        for penultimate_key in penultimate_by_inode:
+            if penultimate_key in latest_by_inode:
+                inodes_in_both.add(penultimate_key)
+            else:
+                deleted_files.append(penultimate_by_inode[penultimate_key]["file_path"])
 
-    new_files = []
-    for latest_key in latest_by_inode:
-        if latest_key in penultimate_by_inode:
-            inodes_in_both.add(latest_key)
-        else:
-            new_files.append(latest_by_inode[latest_key]["file_path"])
+        for latest_key in latest_by_inode:
+            if latest_key in penultimate_by_inode:
+                inodes_in_both.add(latest_key)
+            else:
+                new_files.append(latest_by_inode[latest_key]["file_path"])
 
-    # check on files where inode is same, something else is not
-    modified_files = []
-    renamed_files = []
-    for inode in inodes_in_both:
-        latest_file = latest_by_inode[inode]
-        penultimate_file = penultimate_by_inode[inode]
-        if latest_file["size"] != penultimate_file["size"]:
-            modified_files.append(latest_file["file_path"])
+        # check on files where inode is same, something else is not
+        for inode in inodes_in_both:
+            latest_file = latest_by_inode[inode]
+            penultimate_file = penultimate_by_inode[inode]
+            if latest_file["size"] != penultimate_file["size"]:
+                modified_files.append(latest_file["file_path"])
 
-        if latest_file["file_path"] != penultimate_file["file_path"]:
-            renamed_file = {"old": penultimate_file["file_path"], "new": latest_file["file_path"]}
-            renamed_files.append(renamed_file)
-
-    print("New:", new_files)
-    print("Deleted:", deleted_files)
-    print("Renamed:", renamed_files)
-    print("Modified:", modified_files)
-    print("Unchanged:", unchanged_files)
+            if latest_file["file_path"] != penultimate_file["file_path"]:
+                renamed_file = {"old": penultimate_file["file_path"], "new": latest_file["file_path"]}
+                renamed_files.append(renamed_file)
 
     # write change report to file
     current_date = datetime.datetime.now()
     current_date_flattened = current_date.strftime('%Y-%m-%d_%H_%M_%S')
-    change_report_name = directory_path.replace('/', '_') + '_' + current_date_flattened + '.json'
-    change_report_path = "reports/data/change" + change_report_name
+    change_report_name = 'change' + directory_path.replace('/', '_') + '_' + current_date_flattened + '.json'
+    change_report_path = report_text_loc + change_report_name
     report_dict = {"directory": directory_path, "date": current_date.isoformat(),
                    "changes": {
                        "new": new_files, "deleted": deleted_files, "renamed": renamed_files,
@@ -343,8 +363,8 @@ def run_change_report(directory_path):
 
     current_date = datetime.datetime.now()
     current_date_flattened = current_date.strftime('%Y-%m-%d_%H_%M_%S')
-    file_report_name = directory_path.replace('/', '_') + '_' + current_date_flattened + '.json'
-    file_report_path = "reports/data/files" + file_report_name
+    file_report_name = 'files' + directory_path.replace('/', '_') + '_' + current_date_flattened + '.json'
+    file_report_path = report_data_loc + file_report_name
     report_dict = {"directory": directory_path, "date": current_date.isoformat(), "files": file_array}
     with open(file_report_path, 'w') as file_listing:
         json.dump(report_dict, file_listing)
@@ -422,6 +442,9 @@ def main():
     launch = welcome_screen()
     if launch == 'Quit':
         return
+
+    # prepare to run and store reports
+    create_report_storage_if_none()
 
     main_menu_choice = ""
     while main_menu_choice is not None:
