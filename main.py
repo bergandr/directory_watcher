@@ -31,7 +31,7 @@ def error_dialog(err_type, input_path):
 
 def create_report_storage_if_none():
     """
-    Create index of reports if none exists - meant to run at first time use
+    Create index of reports if none exists - this will create the required files and directories at first launch.
     """
     # create reports index
     if not os.path.exists(report_index_loc):
@@ -41,7 +41,7 @@ def create_report_storage_if_none():
 
     # create watch index
     if not os.path.exists(watch_index_loc):
-        blank_index_dict = {"watches": []}
+        blank_index_dict = {"watches": {}}
         with open(watch_index_loc, 'w') as watch_index:
             json.dump(blank_index_dict, watch_index)
 
@@ -58,7 +58,6 @@ def create_report_storage_if_none():
 def validate_directory(directory_path):
     # validate directory exists
     if not os.path.exists(directory_path):
-        print("error: directory not found:", directory_path)
         error_dialog("no_dir", directory_path)
         return False
     elif not os.path.isdir(directory_path):
@@ -132,12 +131,14 @@ def main_menu():
     return main_choice
 
 
-def manage_watch():
-    # list watched directories
-    # look at directory config
-    # modify directory config
-    # run new report and get diff
-    pass
+def print_report_to_screen(report_path):
+    with open(report_path, 'r') as report:
+        report_dict = json.load(report)
+    report_json_pretty = json.dumps(report_dict, indent=4)
+    os.system('clear')
+    print_formatted_text(report_json_pretty)
+    print("\nThis report is located at: ", report_path)
+    prompt("\nPress enter to return to the main menu. ")
 
 
 def list_reports():
@@ -147,7 +148,7 @@ def list_reports():
     index_list = index_dict["reports"]
     display_list = []
     for report in index_list:
-        # only list contents or change reports, not raw file list data
+        # only list 'contents' or 'change' reports, not raw file list data
         if report["report_type"] != "file_listing":
             report_date = report["date"]
             report_type = report["report_type"]
@@ -169,12 +170,7 @@ def list_reports():
         return
 
     # print the selected report to the screen
-    with open(report_choice, 'r') as report:
-        report_dict = json.load(report)
-    report_json_pretty = json.dumps(report_dict, indent=4)
-    os.system('clear')
-    print_formatted_text(report_json_pretty)
-    prompt("Press enter to return to the main menu. ")
+    print_report_to_screen(report_choice)
 
 
 def get_file_list(directory, file_list):
@@ -246,6 +242,9 @@ def run_contents_report(directory_path):
     with open(report_index_loc, 'w') as report_index:
         json.dump(index_dict, report_index)
 
+    # finally, show the report to the user
+    print_report_to_screen(contents_report_path)
+
 
 def new_contents_report_menu():
     # get directory path
@@ -294,7 +293,6 @@ def diff_file_listing(latest, penultimate, directory_path):
     else:
         with open(penultimate, 'r') as penultimate_report:
             penultimate_dict = json.load(penultimate_report)
-            print(penultimate_dict)
             for file in penultimate_dict["files"]:
                 penultimate_set.add(json.dumps(file))
 
@@ -365,21 +363,54 @@ def diff_file_listing(latest, penultimate, directory_path):
     with open(report_index_loc, 'w') as report_index:
         json.dump(index_dict, report_index)
 
+    # finally, show the report to the user
+    print_report_to_screen(change_report_path)
 
-def run_change_report(directory_path, ignore_string):
+
+def run_change_report(directory_path, ignore_list):
     # logic:
     #   find all files
     #   ignore anything on the ignore list
 
-    # parse the ignore instructions into a list
-    if ignore_string is not None:
-        ignore_list = ignore_string.split('/')
-    else:
-        ignore_list = []
-
+    # get the list of files
     file_list = []
-    get_file_list(directory_path, file_list)
+    file_list_success = get_file_list(directory_path, file_list)
+    if file_list_success is False:
+        error_dialog("no_perms", directory_path)
+        return
 
+    file_count = len(file_list)
+    proceed = file_count_confirmation(file_count)
+    if proceed is False:
+        return  # back to main menu
+
+    # write new watch configuration to file, but first check if config already exists
+    new_watch_config = {"ignore_list": ignore_list}
+    with open(watch_index_loc, 'r') as watch_index:
+        watch_index_dict = json.load(watch_index)
+    if directory_path not in watch_index_dict["watches"]:
+        watch_index_dict["watches"][directory_path] = new_watch_config
+    else:
+        # if the watch is already on the list, check if user wants to re-run it
+        choice = button_dialog(
+            title="Directory already on the watch list",
+            text="The selected directory '" + directory_path + "' is already on the watch list. "
+                 "Do you want to run a new report?\n\nNote: if you've modified the ignore list, those changes "
+                 "will be applied to the watch configuration going forward.\nCurrent ignore list: "
+                 + str(watch_index_dict["watches"][directory_path]["ignore_list"])
+                 + "\nProposed ignore list: " + str(new_watch_config["ignore_list"]),
+            buttons=[
+                ('Continue', True),
+                ('Cancel', False)]
+        ).run()
+        if choice is False:
+            return
+        else:
+            watch_index_dict["watches"][directory_path] = new_watch_config
+    with open(watch_index_loc, 'w') as watch_index:
+        json.dump(watch_index_dict, watch_index)
+
+    # get file details
     file_array = []
     for file in file_list:
         if not os.path.basename(file) in ignore_list:
@@ -391,6 +422,7 @@ def run_change_report(directory_path, ignore_string):
             stat_dict["mime_type"] = magic.from_file(file, mime=True)
             file_array.append(stat_dict)
 
+    # save new file listing to the reports data directory
     current_date = datetime.datetime.now()
     current_date_flattened = current_date.strftime('%Y-%m-%d_%H_%M_%S')
     file_report_name = 'files' + directory_path.replace('/', '_') + '_' + current_date_flattened + '.json'
@@ -399,6 +431,7 @@ def run_change_report(directory_path, ignore_string):
     with open(file_report_path, 'w') as file_listing:
         json.dump(report_dict, file_listing)
 
+    # add new report to the reports index
     new_report = {"directory": directory_path, "date": current_date.isoformat(), "report_path": file_report_path,
                   "report_type": "file_listing"}
     with open(report_index_loc, 'r') as report_index:
@@ -407,7 +440,7 @@ def run_change_report(directory_path, ignore_string):
     with open(report_index_loc, 'w') as report_index:
         json.dump(index_dict, report_index)
 
-    # get existing reports
+    # get existing reports so that we can figure out which are the most recent
     with open(report_index_loc, 'r') as report_index:
         index_dict = json.load(report_index)
     index_list = index_dict["reports"]
@@ -416,9 +449,9 @@ def run_change_report(directory_path, ignore_string):
         if report["directory"] == directory_path and report["report_type"] == "file_listing":
             previous_listings.append(report)
 
-    # use the new file listing data to determine what has or has not changed in the directory
+    # use the new file listing data to determine what has or has not changed in the directory since the last report
     if len(previous_listings) < 2:
-        # if this was the first report for the directory, there won't be a penultimate one
+        # if this was the first report for the directory, there won't be a penultimate one: all files are new
         diff_file_listing(previous_listings[-1]["report_path"],
                           None,
                           directory_path)
@@ -460,7 +493,75 @@ def add_watch_menu():
         cancel_text="Skip"
     ).run()
 
-    run_change_report(directory_path, ignore_string)
+    # parse the ignore instructions into a list
+    if ignore_string is not None and ignore_string != "":
+        ignore_list = ignore_string.split('/')
+    else:
+        ignore_list = []
+
+    run_change_report(directory_path, ignore_list)
+
+
+def manage_watches():
+    # list watched directories
+    # look at watch config
+    with open(watch_index_loc, 'r') as watch_index:
+        index_dict = json.load(watch_index)
+    watch_list = index_dict["watches"]
+
+    display_list = []
+    for watch in watch_list:
+        display_list.append((watch, watch))
+
+    watch_choice = radiolist_dialog(
+        title="All watched directories",
+        text="Choose a watched directory from the list, then select 'Open' to view settings.",
+        values=display_list,
+        ok_text="Open",
+        cancel_text="Main menu",
+    ).run()
+
+    # if the user chooses to return to the main menu
+    if watch_choice is None:
+        return
+
+    watch_settings = watch_list[watch_choice]["ignore_list"]
+    modify_watch_choice = radiolist_dialog(
+        title="Current settings",
+        text="Current settings for '" + watch_choice + "':\n" + "Ignore list: " + str(watch_settings),
+        values=[
+            ("as_is", "Run report with current settings."),
+            ("modify", "Modify settings.")
+        ],
+        ok_text="Select",
+        cancel_text="Return to main menu",
+    ).run()
+
+    if modify_watch_choice == "modify":
+        # get ignore list
+        ignore_dialog_text = ("Please enter a list of filename patterns to ignore.\n\n"
+                              "Note: to get an accurate count, you must have full "
+                              "read permissions to all files in the directory.")
+
+        ignore_string = input_dialog(
+            title="Ignore list",
+            text=ignore_dialog_text,
+            ok_text="Apply",
+            cancel_text="Skip"
+        ).run()
+
+        # parse the ignore instructions into a list
+        if ignore_string is not None and ignore_string != "":
+            ignore_list = ignore_string.split('/')
+        else:
+            ignore_list = []
+    elif modify_watch_choice == "as_is":
+        ignore_list = watch_settings
+    else:
+        # if the user cancels
+        return
+
+    run_change_report(watch_choice, ignore_list)
 
 
 def main():
@@ -490,7 +591,7 @@ def main():
         elif main_menu_choice == "add_watch":
             add_watch_menu()
         elif main_menu_choice == "manage_watch":
-            manage_watch()
+            manage_watches()
 
 
 if __name__ == "__main__":
