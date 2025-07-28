@@ -6,10 +6,6 @@ import magic
 import json
 from prompt_toolkit import prompt
 from prompt_toolkit import print_formatted_text
-# from prompt_toolkit import PromptSession
-# from prompt_toolkit.completion import NestedCompleter, WordCompleter
-# from prompt_toolkit.formatted_text import HTML
-# from prompt_toolkit.styles import Style
 
 report_data_loc = "./reports/data/"  # file listings (data backing the reports)
 report_text_loc = "./reports/text/"  # reports in JSON
