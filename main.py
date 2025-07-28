@@ -22,8 +22,10 @@ def error_dialog(err_type, input_path):
         error_text = "Error: directory not found: " + input_path
     elif err_type == "not_dir":
         error_text = "Error: input is not a directory: " + input_path
+    elif err_type == "no_perms":
+        error_text = "Error: you do not have the required permissions to view the contents of " + input_path
     else:
-        error_text = "Unknown error"
+        error_text = "Error: there was an error trying to read " + input_path
 
     message_dialog(
         title="Error",
@@ -32,17 +34,27 @@ def error_dialog(err_type, input_path):
 
 
 def create_report_storage_if_none():
-    # create index of reports if none exists - meant to run at first time use
-    if os.path.exists(report_index_loc) and os.path.exists(report_data_loc) and os.path.exists(report_text_loc):
-        return
-    else:
-        # create reports index
+    """
+    Create index of reports if none exists - meant to run at first time use
+    """
+    # create reports index
+    if not os.path.exists(report_index_loc):
         blank_index_dict = {"reports": []}
         with open(report_index_loc, 'w') as report_index:
             json.dump(blank_index_dict, report_index)
 
-        # create reports data directory
+    # create watch index
+    if not os.path.exists(watch_index_loc):
+        blank_index_dict = {"watches": []}
+        with open(watch_index_loc, 'w') as watch_index:
+            json.dump(blank_index_dict, watch_index)
+
+    # create reports data directory
+    if not os.path.exists(report_data_loc):
         os.mkdir(report_data_loc)
+
+    # create reports text directory
+    if not os.path.exists(report_text_loc):
         # create reports text directory
         os.mkdir(report_text_loc)
 
@@ -63,12 +75,12 @@ def validate_directory(directory_path):
 def file_count_confirmation(file_count):
     choice = button_dialog(
         title="Ready to run the report?",
-        text="The selected directory contains " + str(file_count) + " files",
+        text="The selected directory contains "
+             + str(file_count) +
+             " files. Directories with a large number of files may take a long time to process",
         buttons=[
-            ('Yes', True),
-            ('Change directory', "change"),
-            ('Return to main menu', False)
-        ]
+            ('Continue', True),
+            ('Cancel', False)]
     ).run()
 
     return choice
@@ -172,17 +184,32 @@ def list_reports():
 def get_file_list(directory, file_list):
     # following example from https://blog.finxter.com/5-best-ways-to-traverse-a-directory-recursively-in-python/
     # recurse through directories, list non-directories as you traverse
-    for listing in os.listdir(directory):
-        full_path = os.path.join(directory, listing)
-        if os.path.isdir(full_path):
-            get_file_list(full_path, file_list)
-        else:
-            file_list.append(full_path)
+    try:
+        for listing in os.listdir(directory):
+            full_path = os.path.join(directory, listing)
+            if os.path.isdir(full_path):
+                file_list_success = get_file_list(full_path, file_list)
+                if file_list_success is False:
+                    return False
+            else:
+                file_list.append(full_path)
+        return True
+
+    except PermissionError:
+        error_dialog("no_perms", directory)
+        return False
+
+    except OSError:
+        error_dialog("OSError", directory)
+        return False
 
 
 def run_contents_report(directory_path):
     file_list = []
-    get_file_list(directory_path, file_list)
+    file_list_success = get_file_list(directory_path, file_list)
+    if file_list_success is False:
+        error_dialog("no_perms", directory_path)
+        return
 
     file_count = len(file_list)
     proceed = file_count_confirmation(file_count)
@@ -246,7 +273,6 @@ def new_contents_report_menu():
         valid_directory = validate_directory(directory_path)
 
     run_contents_report(directory_path)
-    # confirmation
 
 
 def diff_file_listing(latest, penultimate, directory_path):
@@ -344,22 +370,30 @@ def diff_file_listing(latest, penultimate, directory_path):
         json.dump(index_dict, report_index)
 
 
-def run_change_report(directory_path):
+def run_change_report(directory_path, ignore_string):
     # logic:
-    #   if new, all files listed as new
-    #   if previous change report, diff new with previous
+    #   find all files
+    #   ignore anything on the ignore list
+
+    # parse the ignore instructions into a list
+    if ignore_string is not None:
+        ignore_list = ignore_string.split('/')
+    else:
+        ignore_list = []
+
     file_list = []
     get_file_list(directory_path, file_list)
 
     file_array = []
     for file in file_list:
-        stat_dict = {}
-        file_stats = Path(file).stat()
-        stat_dict["file_path"] = file
-        stat_dict["size"] = file_stats.st_size
-        stat_dict["inode"] = file_stats.st_ino
-        stat_dict["mime_type"] = magic.from_file(file, mime=True)
-        file_array.append(stat_dict)
+        if not os.path.basename(file) in ignore_list:
+            stat_dict = {}
+            file_stats = Path(file).stat()
+            stat_dict["file_path"] = file
+            stat_dict["size"] = file_stats.st_size
+            stat_dict["inode"] = file_stats.st_ino
+            stat_dict["mime_type"] = magic.from_file(file, mime=True)
+            file_array.append(stat_dict)
 
     current_date = datetime.datetime.now()
     current_date_flattened = current_date.strftime('%Y-%m-%d_%H_%M_%S')
@@ -386,7 +420,9 @@ def run_change_report(directory_path):
         if report["directory"] == directory_path and report["report_type"] == "file_listing":
             previous_listings.append(report)
 
+    # use the new file listing data to determine what has or has not changed in the directory
     if len(previous_listings) < 2:
+        # if this was the first report for the directory, there won't be a penultimate one
         diff_file_listing(previous_listings[-1]["report_path"],
                           None,
                           directory_path)
@@ -415,20 +451,20 @@ def add_watch_menu():
             return
 
         valid_directory = validate_directory(directory_path)
+
     # get ignore list
-    # validate ignore list
-    # run first report
-    # get ignore list
-    # ignore_list_text = ("Please enter a list of filename patterns to ignore.\n\n"
-    #                     "Note: to get an accurate count, you must have full "
-    #                     "read permissions to all files in the directory.")
-    #
-    # ignore_list = input_dialog(
-    #     title="Ignore list",
-    #     text=ignore_list_text,
-    #     ok_text="Continue",
-    # ).run()
-    run_change_report(directory_path)
+    ignore_dialog_text = ("Please enter a list of filename patterns to ignore.\n\n"
+                          "Note: to get an accurate count, you must have full "
+                          "read permissions to all files in the directory.")
+
+    ignore_string = input_dialog(
+        title="Ignore list",
+        text=ignore_dialog_text,
+        ok_text="Ignore",
+        cancel_text="Skip"
+    ).run()
+
+    run_change_report(directory_path, ignore_string)
 
 
 def main():
