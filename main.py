@@ -5,7 +5,7 @@ from prompt_toolkit.shortcuts import message_dialog, radiolist_dialog, button_di
 import magic
 import json
 from prompt_toolkit import prompt
-from prompt_toolkit import print_formatted_text
+from prompt_toolkit import print_formatted_text, HTML
 
 report_data_loc = "./reports/data/"  # file listings (data backing the reports)
 report_text_loc = "./reports/text/"  # reports in JSON
@@ -88,13 +88,13 @@ def file_count_confirmation(file_count):
 
 def welcome_screen():
     welcome_text = ("Welcome to Directory Watcher!\n\n"
-                    "Keep track of important data by monitoring directories for changes.\n"
+                    "Keep track of important data by monitoring directories for changes.\n\n"
                     "Directory Watcher generates reports of new files, deleted files, and files that have changed.")
     welcome_choice = button_dialog(
         title="Directory Watcher!",
         text=welcome_text,
         buttons=[
-            ("Enter", "Enter"),
+            ("Launch", "Enter"),
             ("Quit", "Quit"),
         ]
     ).run()
@@ -102,20 +102,20 @@ def welcome_screen():
     return welcome_choice
 
 
-def help_screen():
-    help_text = "Some help text." \
-        "\n\nWould you like to continue?"
-
-    help_choice = button_dialog(
-        title="Welcome!",
-        text=help_text,
-        buttons=[
-            ("Yes", "Enter"),
-            ("Quit", "Quit"),
-        ]
-    ).run()
-
-    return help_choice
+# def help_screen():
+#     help_text = "Some help text." \
+#         "\n\nWould you like to continue?"
+#
+#     help_choice = button_dialog(
+#         title="Welcome!",
+#         text=help_text,
+#         buttons=[
+#             ("Yes", "Enter"),
+#             ("Quit", "Quit"),
+#         ]
+#     ).run()
+#
+#     return help_choice
 
 
 def main_menu():
@@ -123,12 +123,11 @@ def main_menu():
         title="Main menu",
         text="Choose from the following options:\n",
         values=[
-            ("manage_watch", "Manage watched directories\n"),
-            ("add_watch", "Add watched directory\n"),
-            ("list_reports", "List all reports\n"),
             ("new_contents", "Create new contents report\n    (report of filetypes within a directory)\n"),
-            ("help", "Help\n\n"
-             "(arrow keys: navigate selections; 'Enter': choose a selection; 'Tab': jump to select/quit")
+            ("add_watch", "Add watched directory\n"),
+            ("manage_watch", "Manage watched directories and check for new changes\n"),
+            ("list_reports", "List all reports\n\n\n"
+             "   [ Arrow keys: navigate selections; 'Enter': choose an option; 'Tab': jump to select/quit ]")
         ],
         ok_text="Select",
         cancel_text="Quit",
@@ -143,8 +142,8 @@ def print_report_to_screen(report_path):
     report_json_pretty = json.dumps(report_dict, indent=4)
     os.system('clear')
     print_formatted_text(report_json_pretty)
-    print("\nThis report is located at: ", report_path)
-    prompt("\nPress enter to return to the main menu. ")
+    print_formatted_text(HTML("\n<u>This report is located at:</u> "), report_path)
+    prompt(HTML("\n<b>Press enter to return to the main menu. </b>"))
 
 
 def list_reports():
@@ -152,6 +151,16 @@ def list_reports():
     with open(report_index_loc, 'r') as report_index:
         index_dict = json.load(report_index)
     index_list = index_dict["reports"]
+
+    # check for an empty list
+    if not index_list:
+        message_dialog(
+            title="No reports",
+            text="No reports found. Reports will appear here once you've added them."
+        ).run()
+        return
+
+    # get the list of reports to display
     display_list = []
     for report in index_list:
         # only list 'contents' or 'change' reports, not raw file list data
@@ -165,13 +174,14 @@ def list_reports():
 
     report_choice = radiolist_dialog(
         title="All reports",
-        text="Choose a report from the list, then select 'Open' to view it.",
+        text="Choose a report from the list, then select 'Open' to view it.\n\n"
+             " Report_type |      Report date           |  Directory analyzed",
         values=display_list,
         ok_text="Open",
-        cancel_text="Main menu",
+        cancel_text=" Main menu",
     ).run()
 
-    # if the user doesn't select a report
+    # if the user doesn't select a report (this corresponds to the "Main Menu" value)
     if report_choice is None:
         return
 
@@ -373,7 +383,7 @@ def diff_file_listing(latest, penultimate, directory_path):
     print_report_to_screen(change_report_path)
 
 
-def run_change_report(directory_path, ignore_list):
+def run_change_report(directory_path, ignore_list, origin):
     # logic:
     #   find all files
     #   ignore anything on the ignore list
@@ -397,22 +407,26 @@ def run_change_report(directory_path, ignore_list):
     if directory_path not in watch_index_dict["watches"]:
         watch_index_dict["watches"][directory_path] = new_watch_config
     else:
-        # if the watch is already on the list, check if user wants to re-run it
-        choice = button_dialog(
-            title="Directory already on the watch list",
-            text="The selected directory '" + directory_path + "' is already on the watch list. "
-                 "Do you want to run a report with new settings?\n\n"
-                 "Note: if you've modified the ignore list, those changes will be applied to the "
-                 "watch configuration going forward. Choose 'cancel' if you do not wish to change the settings."
-                 "\n\nCurrent ignore list:     "
-                 + str(watch_index_dict["watches"][directory_path]["ignore_list"])
-                 + "\nProposed ignore list:    " + str(new_watch_config["ignore_list"]),
-            buttons=[
-                ('Continue', True),
-                ('Cancel', False)]
-        ).run()
-        if choice is False:
-            return
+        if origin == "new":
+            # if the watch is already on the list, but user entered it as new,
+            # check if user wants to re-use existing config
+            choice = button_dialog(
+                title="Directory already on the watch list",
+                text="The selected directory '" + directory_path + "' is already on the watch list. "
+                     "Do you want to run a report with new settings?\n\n"
+                     "Note: if you've modified the ignore list, those changes will be applied to the "
+                     "watch configuration going forward. Choose 'cancel' if you do not wish to change the settings."
+                     "\n\nCurrent ignore list:     "
+                     + str(watch_index_dict["watches"][directory_path]["ignore_list"])
+                     + "\nProposed ignore list:    " + str(new_watch_config["ignore_list"]),
+                buttons=[
+                    ('Continue', True),
+                    ('Cancel', False)]
+            ).run()
+            if choice is False:
+                return
+            else:
+                watch_index_dict["watches"][directory_path] = new_watch_config
         else:
             watch_index_dict["watches"][directory_path] = new_watch_config
     with open(watch_index_loc, 'w') as watch_index:
@@ -490,9 +504,9 @@ def add_watch_menu():
         valid_directory = validate_directory(directory_path)
 
     # get ignore list
-    ignore_dialog_text = ("Please enter a list of filenames to ignore.\n\n"
-                          "Note: if you choose to ignore files previously included in the report, those "
-                          "files will be listed as 'deleted' in the next report.")
+    ignore_dialog_text = ("(Optional) Enter a list of filenames to ignore. These files will not be included"
+                          "in the report.\n\n"
+                          "To enter multiple filenames, separate each filename with a '/' character.")
 
     ignore_string = input_dialog(
         title="Ignore list",
@@ -507,7 +521,7 @@ def add_watch_menu():
     else:
         ignore_list = []
 
-    run_change_report(directory_path, ignore_list)
+    run_change_report(directory_path, ignore_list, "new")
 
 
 def manage_watches():
@@ -516,6 +530,13 @@ def manage_watches():
     with open(watch_index_loc, 'r') as watch_index:
         index_dict = json.load(watch_index)
     watch_list = index_dict["watches"]
+
+    if not watch_list:
+        message_dialog(
+            title="Empty watchlist",
+            text="No watched directories found. Watched directories will appear here once you've added them."
+        ).run()
+        return
 
     display_list = []
     for watch in watch_list:
@@ -536,7 +557,7 @@ def manage_watches():
     watch_settings = watch_list[watch_choice]["ignore_list"]
     modify_watch_choice = radiolist_dialog(
         title="Current settings",
-        text="Current settings for '" + watch_choice + "':\n" + "Ignore list: " + str(watch_settings),
+        text="Current settings for '" + watch_choice + "':\n\n" + "Current ignore list: " + str(watch_settings),
         values=[
             ("as_is", "Run report with current settings."),
             ("modify", "Modify settings.")
@@ -547,9 +568,13 @@ def manage_watches():
 
     if modify_watch_choice == "modify":
         # get ignore list
-        ignore_dialog_text = ("Please enter a list of filenames to ignore.\n\n"
-                              "Note: if you choose to ignore files previously included in the report, those "
-                              "files will be listed as 'deleted' in the next report.")
+        ignore_dialog_text = ("Modify the list of filenames to ignore. Leave blank to stop ignoring files.\n\n"
+                              "Note: changing the ignore list on an existing watch will affect the next report.\n"
+                              "If you choose to ignore files previously included in the report, those "
+                              "files will be listed as 'deleted' in the next report.\n"
+                              "If you stop ignoring a previously ignored file, then it will appear as 'new' in"
+                              "the next report.\n\n"
+                              "Choose 'Skip' to retain the existing list.")
 
         ignore_string = input_dialog(
             title="Ignore list",
@@ -561,25 +586,20 @@ def manage_watches():
         # parse the ignore instructions into a list
         if ignore_string is not None and ignore_string != "":
             ignore_list = ignore_string.split('/')
-        else:
+        elif ignore_string == "":
             ignore_list = []
+        else:
+            ignore_list = watch_settings
     elif modify_watch_choice == "as_is":
         ignore_list = watch_settings
     else:
         # if the user cancels
         return
 
-    run_change_report(watch_choice, ignore_list)
+    run_change_report(watch_choice, ignore_list, "existing")
 
 
 def main():
-    # run_change_report("/Users/andrewberger/experiments")
-    # diff_file_listing("reports/data/_Users_andrewberger_experiments_2025-07-27_17_37_33.json",
-    #                   "reports/data/_Users_andrewberger_experiments_2025-07-27_15_44_30.json",
-    #                   "/Users/andrewberger/experiments")
-    # print("only diffed")
-    # return
-
     launch = welcome_screen()
     if launch == 'Quit':
         return
@@ -594,8 +614,8 @@ def main():
             new_contents_report_menu()
         elif main_menu_choice == "list_reports":
             list_reports()
-        elif main_menu_choice == "help":
-            help_screen()
+        # elif main_menu_choice == "help":
+        #     help_screen()
         elif main_menu_choice == "add_watch":
             add_watch_menu()
         elif main_menu_choice == "manage_watch":
