@@ -33,6 +33,10 @@ def create_report_storage_if_none():
     """
     Create index of reports if none exists - this will create the required files and directories at first launch.
     """
+    # create reports directory
+    if not os.path.exists('./reports'):
+        os.mkdir('./reports')
+
     # create reports index
     if not os.path.exists(report_index_loc):
         blank_index_dict = {"reports": []}
