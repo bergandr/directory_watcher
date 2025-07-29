@@ -72,7 +72,8 @@ def file_count_confirmation(file_count):
         title="Ready to run the report?",
         text="The selected directory contains "
              + str(file_count) +
-             " files. Directories with a large number of files may take a long time to process",
+             " files. Directories with a large number of files may take a long time to process.\n\n"
+             "Would you still like to continue?",
         buttons=[
             ('Continue', True),
             ('Cancel', False)]
@@ -82,14 +83,14 @@ def file_count_confirmation(file_count):
 
 
 def welcome_screen():
-    welcome_text = "Some welcome text." \
-        "\n\nWould you like to enter?"
-
+    welcome_text = ("Welcome to Directory Watcher!\n\n"
+                    "Keep track of important data by monitoring directories for changes.\n"
+                    "Directory Watcher generates reports of new files, deleted files, and files that have changed.")
     welcome_choice = button_dialog(
-        title="Welcome!",
+        title="Directory Watcher!",
         text=welcome_text,
         buttons=[
-            ("Yes", "Enter"),
+            ("Enter", "Enter"),
             ("Quit", "Quit"),
         ]
     ).run()
@@ -116,13 +117,14 @@ def help_screen():
 def main_menu():
     main_choice = radiolist_dialog(
         title="Main menu",
-        text="Choose from the following options",
+        text="Choose from the following options:\n",
         values=[
             ("manage_watch", "Manage watched directories\n"),
             ("add_watch", "Add watched directory\n"),
             ("list_reports", "List all reports\n"),
-            ("new_contents", "Create new contents report\n"),
-            ("help", "Help")
+            ("new_contents", "Create new contents report\n    (report of filetypes within a directory)\n"),
+            ("help", "Help\n\n"
+             "(arrow keys: navigate selections; 'Enter': choose a selection; 'Tab': jump to select/quit")
         ],
         ok_text="Select",
         cancel_text="Quit",
@@ -395,10 +397,12 @@ def run_change_report(directory_path, ignore_list):
         choice = button_dialog(
             title="Directory already on the watch list",
             text="The selected directory '" + directory_path + "' is already on the watch list. "
-                 "Do you want to run a new report?\n\nNote: if you've modified the ignore list, those changes "
-                 "will be applied to the watch configuration going forward.\nCurrent ignore list: "
+                 "Do you want to run a report with new settings?\n\n"
+                 "Note: if you've modified the ignore list, those changes will be applied to the "
+                 "watch configuration going forward. Choose 'cancel' if you do not wish to change the settings."
+                 "\n\nCurrent ignore list:     "
                  + str(watch_index_dict["watches"][directory_path]["ignore_list"])
-                 + "\nProposed ignore list: " + str(new_watch_config["ignore_list"]),
+                 + "\nProposed ignore list:    " + str(new_watch_config["ignore_list"]),
             buttons=[
                 ('Continue', True),
                 ('Cancel', False)]
@@ -482,14 +486,14 @@ def add_watch_menu():
         valid_directory = validate_directory(directory_path)
 
     # get ignore list
-    ignore_dialog_text = ("Please enter a list of filename patterns to ignore.\n\n"
-                          "Note: to get an accurate count, you must have full "
-                          "read permissions to all files in the directory.")
+    ignore_dialog_text = ("Please enter a list of filenames to ignore.\n\n"
+                          "Note: if you choose to ignore files previously included in the report, those "
+                          "files will be listed as 'deleted' in the next report.")
 
     ignore_string = input_dialog(
         title="Ignore list",
         text=ignore_dialog_text,
-        ok_text="Ignore",
+        ok_text="Add list",
         cancel_text="Skip"
     ).run()
 
@@ -518,7 +522,7 @@ def manage_watches():
         text="Choose a watched directory from the list, then select 'Open' to view settings.",
         values=display_list,
         ok_text="Open",
-        cancel_text="Main menu",
+        cancel_text=" Main menu",
     ).run()
 
     # if the user chooses to return to the main menu
@@ -534,19 +538,19 @@ def manage_watches():
             ("modify", "Modify settings.")
         ],
         ok_text="Select",
-        cancel_text="Return to main menu",
+        cancel_text="Main menu",
     ).run()
 
     if modify_watch_choice == "modify":
         # get ignore list
-        ignore_dialog_text = ("Please enter a list of filename patterns to ignore.\n\n"
-                              "Note: to get an accurate count, you must have full "
-                              "read permissions to all files in the directory.")
+        ignore_dialog_text = ("Please enter a list of filenames to ignore.\n\n"
+                              "Note: if you choose to ignore files previously included in the report, those "
+                              "files will be listed as 'deleted' in the next report.")
 
         ignore_string = input_dialog(
             title="Ignore list",
             text=ignore_dialog_text,
-            ok_text="Apply",
+            ok_text="Add list",
             cancel_text="Skip"
         ).run()
 
