@@ -4,29 +4,14 @@ import datetime
 from prompt_toolkit.shortcuts import message_dialog, radiolist_dialog, button_dialog, input_dialog
 import magic
 import json
-from prompt_toolkit import prompt
-from prompt_toolkit import print_formatted_text, HTML
+from shared import validate_directory, file_count_confirmation, error_dialog, print_report_to_screen, get_file_list
+from contents import run_contents_report
+
 
 report_data_loc = "./reports/data/"  # file listings (data backing the reports)
 report_text_loc = "./reports/text/"  # reports in JSON
 report_index_loc = "./reports/index.json"  # index of all reports
 watch_index_loc = "./reports/watch_index.json"  # index of directories being watched
-
-
-def error_dialog(err_type, input_path):
-    if err_type == "no_dir":
-        error_text = "Error: directory not found: " + input_path
-    elif err_type == "not_dir":
-        error_text = "Error: input is not a directory: " + input_path
-    elif err_type == "no_perms":
-        error_text = "Error: you do not have the required permissions to view the contents of " + input_path
-    else:
-        error_text = "Error: there was an error trying to read " + input_path
-
-    message_dialog(
-        title="Error",
-        text=error_text,
-    ).run()
 
 
 def create_report_storage_if_none():
@@ -59,33 +44,6 @@ def create_report_storage_if_none():
         os.mkdir(report_text_loc)
 
 
-def validate_directory(directory_path):
-    # validate directory exists
-    if not os.path.exists(directory_path):
-        error_dialog("no_dir", directory_path)
-        return False
-    elif not os.path.isdir(directory_path):
-        error_dialog("not_dir", directory_path)
-        return False
-    else:
-        return True
-
-
-def file_count_confirmation(file_count):
-    choice = button_dialog(
-        title="Ready to run the report?",
-        text="The selected directory contains "
-             + str(file_count) +
-             " files. Directories with a large number of files may take a long time to process.\n\n"
-             "Would you still like to continue?",
-        buttons=[
-            ('Continue', True),
-            ('Cancel', False)]
-    ).run()
-
-    return choice
-
-
 def welcome_screen():
     welcome_text = ("Welcome to Directory Watcher!\n\n"
                     "Keep track of important data by monitoring directories for changes.\n\n"
@@ -100,22 +58,6 @@ def welcome_screen():
     ).run()
 
     return welcome_choice
-
-
-# def help_screen():
-#     help_text = "Some help text." \
-#         "\n\nWould you like to continue?"
-#
-#     help_choice = button_dialog(
-#         title="Welcome!",
-#         text=help_text,
-#         buttons=[
-#             ("Yes", "Enter"),
-#             ("Quit", "Quit"),
-#         ]
-#     ).run()
-#
-#     return help_choice
 
 
 def main_menu():
@@ -134,16 +76,6 @@ def main_menu():
     ).run()
 
     return main_choice
-
-
-def print_report_to_screen(report_path):
-    with open(report_path, 'r') as report:
-        report_dict = json.load(report)
-    report_json_pretty = json.dumps(report_dict, indent=4)
-    os.system('clear')
-    print_formatted_text(report_json_pretty)
-    print_formatted_text(HTML("\n<u>This report is located at:</u> "), report_path)
-    prompt(HTML("\n<b>Press enter to return to the main menu. </b>"))
 
 
 def list_reports():
@@ -187,79 +119,6 @@ def list_reports():
 
     # print the selected report to the screen
     print_report_to_screen(report_choice)
-
-
-def get_file_list(directory, file_list):
-    # following example from https://blog.finxter.com/5-best-ways-to-traverse-a-directory-recursively-in-python/
-    # recurse through directories, list non-directories as you traverse
-    try:
-        for listing in os.listdir(directory):
-            full_path = os.path.join(directory, listing)
-            if os.path.isdir(full_path):
-                file_list_success = get_file_list(full_path, file_list)
-                if file_list_success is False:
-                    return False
-            else:
-                file_list.append(full_path)
-        return True
-
-    except PermissionError:
-        error_dialog("no_perms", directory)
-        return False
-
-    except OSError:
-        error_dialog("OSError", directory)
-        return False
-
-
-def run_contents_report(directory_path):
-    file_list = []
-    file_list_success = get_file_list(directory_path, file_list)
-    if file_list_success is False:
-        error_dialog("no_perms", directory_path)
-        return
-
-    file_count = len(file_list)
-    proceed = file_count_confirmation(file_count)
-    if proceed is False:
-        return  # back to main menu
-
-    file_array = []
-    for file in file_list:
-        stat_dict = {}
-        file_stats = Path(file).stat()
-        stat_dict["file_path"] = file
-        stat_dict["size"] = file_stats.st_size
-        stat_dict["inode"] = file_stats.st_ino
-        stat_dict["mime_type"] = magic.from_file(file, mime=True)
-        file_array.append(stat_dict)
-
-    mimetypes_count = {}
-    for item in file_array:
-        mime = item["mime_type"]
-        if mime in mimetypes_count:
-            mimetypes_count[mime] += 1
-        else:
-            mimetypes_count[mime] = 1
-
-    current_date = datetime.datetime.now()
-    current_date_flattened = current_date.strftime('%Y-%m-%d_%H_%M_%S')
-    contents_report_name = directory_path.replace('/', '_') + '_' + current_date_flattened + '.json'
-    contents_report_path = "reports/text/contents" + contents_report_name
-    report_dict = {"directory": directory_path, "date": current_date.isoformat(), "mimetypes": mimetypes_count}
-    with open(contents_report_path, 'w') as contents_file:
-        json.dump(report_dict, contents_file)
-
-    new_report = {"directory": directory_path, "date": current_date.isoformat(), "report_path": contents_report_path,
-                  "report_type": "contents"}
-    with open(report_index_loc, 'r') as report_index:
-        index_dict = json.load(report_index)
-    index_dict["reports"].append(new_report)
-    with open(report_index_loc, 'w') as report_index:
-        json.dump(index_dict, report_index)
-
-    # finally, show the report to the user
-    print_report_to_screen(contents_report_path)
 
 
 def new_contents_report_menu():
