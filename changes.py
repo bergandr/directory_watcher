@@ -8,7 +8,7 @@ from shared import get_file_list, error_dialog, file_count_confirmation, print_r
 from report_locations import report_data_loc, report_index_loc, report_text_loc, watch_index_loc
 
 
-def diff_file_listing(latest, penultimate, directory_path):
+def diff_file_listing(latest, penultimate, directory_path, mode):
     latest_set = set()
     penultimate_set = set()
 
@@ -101,8 +101,9 @@ def diff_file_listing(latest, penultimate, directory_path):
     with open(report_index_loc, 'w') as report_index:
         json.dump(index_dict, report_index)
 
-    # finally, show the report to the user
-    print_report_to_screen(change_report_path)
+    if mode == "interactive":
+        # finally, show the report to the user
+        print_report_to_screen(change_report_path)
 
 
 def run_change_report(directory_path, ignore_list, origin, mode):
@@ -121,9 +122,10 @@ def run_change_report(directory_path, ignore_list, origin, mode):
         return
 
     file_count = len(file_list)
-    proceed = file_count_confirmation(file_count)
-    if proceed is False:
-        return  # back to main menu
+    if mode == "interactive":
+        proceed = file_count_confirmation(file_count)
+        if proceed is False:
+            return  # back to main menu
 
     # write new watch configuration to file, but first check if config already exists
     new_watch_config = {"ignore_list": ignore_list}
@@ -132,7 +134,7 @@ def run_change_report(directory_path, ignore_list, origin, mode):
     if directory_path not in watch_index_dict["watches"]:
         watch_index_dict["watches"][directory_path] = new_watch_config
     else:
-        if origin == "new":
+        if origin == "new" and mode == "interactive":
             # if the watch is already on the list, but user entered it as new,
             # check if user wants to re-use existing config
             choice = button_dialog(
@@ -201,8 +203,8 @@ def run_change_report(directory_path, ignore_list, origin, mode):
         # if this was the first report for the directory, there won't be a penultimate one: all files are new
         diff_file_listing(previous_listings[-1]["report_path"],
                           None,
-                          directory_path)
+                          directory_path, mode)
     else:
         diff_file_listing(previous_listings[-1]["report_path"],
                           previous_listings[-2]["report_path"],
-                          directory_path)
+                          directory_path, mode)

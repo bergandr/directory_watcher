@@ -15,9 +15,7 @@ def find_watch(directory):
         index_dict = json.load(watch_index)
     watch_list = index_dict["watches"]
     if directory in watch_list:
-        print("being watched")
         watch_settings = watch_list[directory]["ignore_list"]
-        print(watch_settings)
         run_change_report(directory, watch_settings, "existing", "cli")
     else:
         print("directory not watched")
