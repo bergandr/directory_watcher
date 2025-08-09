@@ -3,12 +3,7 @@ import magic
 from pathlib import Path
 from shared import error_dialog, get_file_list, file_count_confirmation, print_report_to_screen
 import datetime
-
-
-report_data_loc = "./reports/data/"  # file listings (data backing the reports)
-report_text_loc = "./reports/text/"  # reports in JSON
-report_index_loc = "./reports/index.json"  # index of all reports
-watch_index_loc = "./reports/watch_index.json"  # index of directories being watched
+from report_locations import report_index_loc
 
 
 def run_contents_report(directory_path):

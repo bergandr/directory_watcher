@@ -4,12 +4,7 @@ import json
 from shared import validate_directory, print_report_to_screen
 from contents import run_contents_report
 from changes import run_change_report
-
-
-report_data_loc = "./reports/data/"  # file listings (data backing the reports)
-report_text_loc = "./reports/text/"  # reports in JSON
-report_index_loc = "./reports/index.json"  # index of all reports
-watch_index_loc = "./reports/watch_index.json"  # index of directories being watched
+from report_locations import report_data_loc, report_index_loc, report_text_loc, watch_index_loc
 
 
 def create_report_storage_if_none():

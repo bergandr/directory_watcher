@@ -3,13 +3,7 @@ import os
 import sys
 import json
 from changes import run_change_report
-
-
-report_data_loc = "./reports/data/"  # file listings (data backing the reports)
-report_text_loc = "./reports/text/"  # reports in JSON
-report_index_loc = "./reports/index.json"  # index of all reports
-watch_index_loc = "./reports/watch_index.json"  # index of directories being watched
-
+from report_locations import watch_index_loc
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-d", "--directory", help="directory to watch")
@@ -37,7 +31,7 @@ def take_input():
         else:
             find_watch(args.directory)
     else:
-        print("you must specify a directory")
+        print("Error. You must specify a directory", file=sys.stderr)
 
 
 def main():
