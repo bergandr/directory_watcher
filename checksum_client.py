@@ -26,7 +26,7 @@ def send_request(request):
     socket = context.socket(zmq.REQ)
     socket.connect("tcp://localhost:1111")
 
-    # loop over the sample data
+    # log the request to the screen so we can see what happens
     print("\nSending", request)
     socket.send_json(request)  # use send_json since all requests will be in JSON format
 
@@ -37,10 +37,6 @@ def send_request(request):
     time.sleep(5)  # so that we can see each request more clearly on the video demo
     return reply
 
-
-# def write_checksum_file(checksums):
-#     with open('prng-service.txt', 'w') as prng_file:
-#         prng_file.write("run")
 
 def get_checksums(directory_path):
     file_list = []
@@ -54,7 +50,8 @@ def get_checksums(directory_path):
     print(request)
     checksums = send_request(request)
     print(checksums)
-    # write change report to file
+
+    # write the checksum report to a file, using the sha512sum format
     current_date = datetime.datetime.now()
     current_date_flattened = current_date.strftime('%Y-%m-%d_%H_%M_%S')
     checksum_report_name = 'checksums' + directory_path.replace('/', '_') + '_' + current_date_flattened + '.txt'
@@ -62,5 +59,5 @@ def get_checksums(directory_path):
 
     with open(checksum_report_path, 'w') as checksum_file:
         for file in checksums:
-            checksum_line = (checksums[file] + " " + file + '\n')
+            checksum_line = (checksums[file] + "  " + file + '\n')
             checksum_file.write(checksum_line)
