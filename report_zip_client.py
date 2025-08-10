@@ -1,6 +1,5 @@
 import shutil
 import zmq
-import time
 import json
 import os
 from report_locations import zip_dir, report_index_loc
@@ -25,7 +24,6 @@ def send_request(request):
     reply_pretty = json.dumps(reply, indent=4)
     print("Received reply:\n", reply_pretty)
 
-    time.sleep(5)  # so that we can see each request more clearly on the video demo
     return reply
 
 
@@ -49,11 +47,3 @@ def aggregate_reports(directory_path):
         shutil.rmtree(zip_report_dir_full_path)
         print_formatted_text(HTML("\n<u>The download is located at:</u> "), result["zipped_file"])
         prompt(HTML("\n<b>Press enter to return to the menu. </b>"))
-
-
-def main():
-    aggregate_reports("/Users/andrewberger/cs361-samples")
-
-
-if __name__ == "__main__":
-    main()

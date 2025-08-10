@@ -1,8 +1,8 @@
 import zmq
-import time
 import json
 import datetime
 from report_locations import report_index_loc, checksum_dir
+from prompt_toolkit import prompt, HTML
 
 
 def get_most_recent(directory_path):
@@ -32,9 +32,7 @@ def send_request(request):
 
     # get the reply from the server
     reply = socket.recv_json()
-    print("Full reply:", reply)
-
-    time.sleep(5)  # so that we can see each request more clearly on the video demo
+    print("\nFull reply:", reply)
     return reply
 
 
@@ -49,7 +47,6 @@ def get_checksums(directory_path):
     request = {"file_list": file_list}
     print(request)
     checksums = send_request(request)
-    print(checksums)
 
     # write the checksum report to a file, using the sha512sum format
     current_date = datetime.datetime.now()
@@ -61,3 +58,6 @@ def get_checksums(directory_path):
         for file in checksums:
             checksum_line = (checksums[file] + "  " + file + '\n')
             checksum_file.write(checksum_line)
+
+    print("\nReport created at: ", checksum_report_path)
+    prompt(HTML("\n<b>Press enter to return to the menu. </b>"))

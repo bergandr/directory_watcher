@@ -1,8 +1,8 @@
 import json
 import zmq
-import time
 import os
 from report_locations import chart_dir
+from prompt_toolkit import prompt, HTML
 
 
 def get_contents_pie(report):
@@ -64,7 +64,6 @@ def send_request(request_dict):
 
     # get path to chart
     chart_path = reply_list[1].strip("'")
-    time.sleep(5)  # so that we can see each request more clearly on the video demo
     return chart_path
 
 
@@ -79,4 +78,6 @@ def route_plot_request(report, report_type):
 
     relative_chart_path = send_request(request)
     full_chart_path = os.path.join(chart_dir, relative_chart_path)
+    print("The microservice created an image at ", full_chart_path)
+    prompt(HTML("\n<b>Press enter to return to the menu. </b>"))
     return full_chart_path
