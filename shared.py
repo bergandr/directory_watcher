@@ -54,7 +54,7 @@ def print_report_to_screen(report_path):
     os.system('clear')
     print_formatted_text(report_json_pretty)
     print_formatted_text(HTML("\n<u>This report is located at:</u> "), report_path)
-    prompt(HTML("\n<b>Press enter to return to the main menu. </b>"))
+    prompt(HTML("\n<b>Press enter to return to the menu. </b>"))
 
 
 def get_file_list(directory, file_list):
