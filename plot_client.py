@@ -80,13 +80,3 @@ def route_plot_request(report, report_type):
     relative_chart_path = send_request(request)
     full_chart_path = os.path.join(chart_dir, relative_chart_path)
     return full_chart_path
-
-
-def main():
-    # report = "/Users/andrewberger/PycharmProjects/directory_watcher/reports/text/change_Users_andrewberger_cs361-samples_2025-08-08_22_20_00.json"
-    # route_plot_request(report, "change")
-    # send_request(request)
-    pass
-
-if __name__ == "__main__":
-    main()
