@@ -7,3 +7,6 @@ report_data_loc = os.path.join(this_script_dir, "reports/data/")  # file listing
 report_text_loc = os.path.join(this_script_dir, "reports/text/")  # reports in JSON
 report_index_loc = os.path.join(this_script_dir, "reports/index.json")  # index of all reports
 watch_index_loc = os.path.join(this_script_dir, "reports/watch_index.json")  # index of directories being watched
+
+# microservice shared locations
+chart_dir = "/Users/andrewberger/cs361/microservices/data-visualizer"

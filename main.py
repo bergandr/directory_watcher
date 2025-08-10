@@ -5,6 +5,7 @@ from shared import validate_directory, print_report_to_screen
 from contents import run_contents_report
 from changes import run_change_report
 from report_locations import report_data_loc, report_index_loc, report_text_loc, watch_index_loc
+from plot_client import route_plot_request
 
 
 def create_report_storage_if_none():
@@ -71,6 +72,34 @@ def main_menu():
     return main_choice
 
 
+def report_details(report_path, report_type):
+    with open(report_path, 'r') as report:
+        report_dict = json.load(report)
+
+    directory = report_dict["directory"]
+    detail_header = f"Viewing details for \n{directory}:\n"
+
+    view_choice = radiolist_dialog(
+        title="Report details",
+        text=detail_header,
+        values=[
+            ("show_json", "View report"),
+            ("show_chart", "View chart")
+        ],
+        ok_text="Open",
+        cancel_text=" Go back",
+    ).run()
+    if view_choice == "show_json":
+        print_report_to_screen(report_path)
+    if view_choice == "show_chart":
+        new_plot = route_plot_request(report_path, report_type)
+        print("Received chart from data microservice at:\n", new_plot)
+        os.system("open " + new_plot)
+
+    # return to the reports menu
+    list_reports()
+
+
 def list_reports():
     # list all reports and report types
     with open(report_index_loc, 'r') as report_index:
@@ -109,9 +138,17 @@ def list_reports():
     # if the user doesn't select a report (this corresponds to the "Main Menu" value)
     if report_choice is None:
         return
+    else:
+        # get the report type for the selected report
+        # TODO find way to avoid looping through reports index twice
+        report_type = None
+        for report in index_list:
+            if report["report_path"] == report_choice:
+                report_type = report["report_type"]
 
-    # print the selected report to the screen
-    print_report_to_screen(report_choice)
+    if report_type is not None:
+        # print the selected report to the screen
+        report_details(report_choice, report_type)
 
 
 def new_contents_report_menu():
