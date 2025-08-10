@@ -6,6 +6,9 @@ from contents import run_contents_report
 from changes import run_change_report
 from report_locations import report_data_loc, report_index_loc, report_text_loc, watch_index_loc
 from plot_client import route_plot_request
+from checksum_client import get_checksums
+from report_zip_client import aggregate_reports
+from schedule_client import build_command
 
 
 def create_report_storage_if_none():
@@ -93,7 +96,6 @@ def report_details(report_path, report_type):
         print_report_to_screen(report_path)
     if view_choice == "show_chart":
         new_plot = route_plot_request(report_path, report_type)
-        print("Received chart from data microservice at:\n", new_plot)
         os.system("open " + new_plot)
 
     # return to the reports menu
@@ -247,18 +249,21 @@ def manage_watches():
         return
 
     watch_settings = watch_list[watch_choice]["ignore_list"]
-    modify_watch_choice = radiolist_dialog(
+    process_watch_choice = radiolist_dialog(
         title="Current settings",
         text="Current settings for '" + watch_choice + "':\n\n" + "Current ignore list: " + str(watch_settings),
         values=[
             ("as_is", "Run report with current settings."),
-            ("modify", "Modify settings.")
+            ("modify", "Modify ignore list and run new report."),
+            ("checksums", "Create checksum audit file."),
+            ("make_zip", "Generate zip of all reports."),
+            ("schedule", "Create recurring schedule.")
         ],
         ok_text="Select",
         cancel_text="Main menu",
     ).run()
 
-    if modify_watch_choice == "modify":
+    if process_watch_choice == "modify":
         # get ignore list
         ignore_dialog_text = ("Modify the list of filenames to ignore. Leave blank to stop ignoring files.\n\n"
                               "Note: changing the ignore list on an existing watch will affect the next report.\n"
@@ -282,13 +287,22 @@ def manage_watches():
             ignore_list = []
         else:
             ignore_list = watch_settings
-    elif modify_watch_choice == "as_is":
+        run_change_report(watch_choice, ignore_list, "existing", "interactive")
+    elif process_watch_choice == "as_is":
         ignore_list = watch_settings
+        run_change_report(watch_choice, ignore_list, "existing", "interactive")
+    elif process_watch_choice == "schedule":
+        build_command(watch_choice)
+    elif process_watch_choice == "make_zip":
+        aggregate_reports(watch_choice)
+    elif process_watch_choice == "checksums":
+        get_checksums(watch_choice)
+
     else:
         # if the user cancels
         return
 
-    run_change_report(watch_choice, ignore_list, "existing", "interactive")
+    manage_watches()
 
 
 def main():
